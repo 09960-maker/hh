@@ -1,0 +1,87 @@
+(function () {
+  'use strict';
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const INTERESTS = {
+    tech: ['ชอบคำนวณ สร้างระบบ เทคโนโลยี', ['วิศวกรรม', 'คอมพิวเตอร์', 'สารสนเทศ', 'เทคโนโลยี', 'วิทยาการ', 'ดิจิทัล']],
+    sci: ['ชอบวิทย์ ทดลอง สุขภาพ ธรรมชาติ', ['วิทยาศาสตร์', 'แพทย', 'เภสัช', 'สัตว', 'เกษตร', 'พยาบาล', 'ทันต', 'สาธารณสุข']],
+    lang: ['ชอบภาษา สื่อสาร ศิลปะ', ['อักษร', 'ภาษา', 'นิเทศ', 'มนุษย', 'ศิลป', 'สื่อสาร', 'ครุ', 'ศึกษา']],
+    biz: ['ชอบธุรกิจ สังคม การเมือง กฎหมาย', ['บริหาร', 'เศรษฐ', 'บัญชี', 'รัฐศาสตร์', 'นิติ', 'พาณิชย์', 'สังคม']]
+  };
+  const RISKS = { ok: 'เน้นปลอดภัย ติดแน่ๆ', mid: 'สมดุล ลุ้นได้', hard: 'ท้าทาย ขอลองสูงไว้ก่อน' };
+  const programs = () => (typeof DATA !== 'undefined' && DATA && Array.isArray(DATA.programs)) ? DATA.programs : [];
+
+  let a = { i: '', r: '' };
+
+  const css = document.createElement('style');
+  css.textContent = `
+  #ad-fab{position:fixed;left:16px;bottom:calc(76px + env(safe-area-inset-bottom));z-index:20;border:2px solid var(--ink,#16324f);border-radius:99px;padding:10px 16px;background:var(--gold,#f2b632);color:#16324f;font:600 .95rem inherit;font-family:inherit;cursor:pointer}
+  #ad{width:min(560px,100vw);max-width:100vw;height:min(88vh,720px);margin:auto auto 0;padding:0;border:0;border-radius:16px 16px 0 0;background:var(--bg,#f6f7f4);color:var(--ink,#16324f);font-family:inherit}
+  #ad::backdrop{background:rgba(0,0,0,.45)}
+  #ad .w{padding:16px;overflow:auto;height:100%}
+  #ad h2{margin:0 0 4px;font-size:1.1rem}#ad h3{margin:16px 0 8px;font-size:1rem}
+  #ad .h{display:flex;justify-content:space-between;align-items:center}
+  #ad .chips{display:grid;gap:8px}
+  #ad button{border:1px solid var(--ink,#16324f);background:var(--card,#fff);color:inherit;border-radius:10px;padding:10px 12px;font:inherit;text-align:left;cursor:pointer}
+  #ad button.on{background:var(--ink,#16324f);color:var(--bg,#fff)}
+  #ad .c{background:var(--card,#fff);border:1px solid var(--line,#dbe0e3);border-radius:10px;padding:12px;margin:10px 0;display:grid;gap:6px}
+  #ad small{color:var(--mute,#5b6b7c)}
+  #ad :focus-visible,#ad-fab:focus-visible{outline:3px solid #f2b632;outline-offset:2px}`;
+  document.head.appendChild(css);
+
+  const fab = document.createElement('button');
+  fab.id = 'ad-fab'; fab.type = 'button'; fab.textContent = 'ช่วยเลือกคณะ';
+  const dlg = document.createElement('dialog');
+  dlg.id = 'ad'; dlg.setAttribute('aria-label', 'ช่วยเลือกคณะ');
+  document.body.append(fab, dlg);
+
+  function statusOf(p) {
+    try {
+      if (p.w && typeof Calc !== 'undefined' && typeof Store !== 'undefined') return Calc.status(p, Store.s.scores);
+    } catch (e) {}
+    return { cls: 'na', label: '', v: null };
+  }
+  function recommend() {
+    const kw = INTERESTS[a.i][1];
+    return programs().map(p => {
+      const text = p.name + ' ' + p.uni, st = statusOf(p);
+      let s = 0; const why = [];
+      if (kw.some(k => text.includes(k))) { s += 3; why.push('ตรงกับความสนใจ'); }
+      if (st.cls === a.r) { s += 2; why.push('ระดับความเสี่ยงตรงที่เลือก'); }
+      else if (st.cls === 'mid' && a.r !== 'mid') { s += 1; }
+      if (st.label) why.push('คะแนนคุณ: ' + st.label);
+      return { p, s, why, st };
+    }).filter(x => x.s >= 3).sort((x, y) => y.s - x.s).slice(0, 5);
+  }
+  function chips(key, opts) {
+    return '<div class="chips">' + opts.map(([k, t]) => `<button data-k="${key}" data-v="${k}" class="${a[key] === k ? 'on' : ''}" aria-pressed="${a[key] === k}">${esc(t)}</button>`).join('') + '</div>';
+  }
+  function render() {
+    let h = `<div class="h"><h2>ช่วยเลือกคณะ</h2><button data-close>ปิด</button></div>
+      <h3>1. คุณสนใจอะไรมากที่สุด</h3>${chips('i', Object.entries(INTERESTS).map(([k, v]) => [k, v[0]]))}
+      <h3>2. อยากเล่นแบบไหน</h3>${chips('r', Object.entries(RISKS))}`;
+    if (a.i && a.r) {
+      const res = recommend();
+      h += '<h3>คณะที่น่าลอง</h3>';
+      if (!programs().length) h += '<p>ไม่พบข้อมูลคณะ</p>';
+      else if (!res.length) h += '<p>ยังไม่มีคณะที่ตรงในข้อมูลตอนนี้ ลองเปลี่ยนคำตอบ หรือกรอกคะแนนในแท็บ “คะแนน” เพื่อให้ระบบประเมินระดับความเสี่ยงได้</p>';
+      else h += res.map(({ p, why }) => {
+        const added = window.Picker && Picker.has(p.id);
+        return `<div class="c"><b>${esc(p.name)}</b><small>${esc(p.uni)}, รอบ ${esc(p.round)}</small>
+        <small>${esc(why.join(', '))}</small>
+        ${window.Picker ? `<button data-add="${esc(p.id)}"${added ? ' disabled' : ''}>${added ? 'อยู่ในอันดับแล้ว ✓' : 'เพิ่มเข้าอันดับของฉัน'}</button>` : ''}</div>`;
+      }).join('') + '<button data-reset>เริ่มใหม่</button>';
+    }
+    dlg.innerHTML = `<div class="w">${h}</div>`;
+  }
+  fab.addEventListener('click', () => { render(); dlg.showModal(); });
+  dlg.addEventListener('click', e => {
+    if (e.target === dlg) return dlg.close();
+    const b = e.target.closest('button'); if (!b) return;
+    const d = b.dataset, y = dlg.querySelector('.w').scrollTop;
+    if ('close' in d) return dlg.close();
+    if ('reset' in d) { a = { i: '', r: '' }; return render(); }
+    if (d.k) a[d.k] = d.v;
+    if (d.add) { const p = programs().find(x => x.id === d.add); if (p) Picker.add(p); }
+    render(); dlg.querySelector('.w').scrollTop = y;
+  });
+})();
