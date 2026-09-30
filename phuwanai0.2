@@ -1,0 +1,142 @@
+(function () {
+  'use strict';
+  const KEY = 'tcas70_picks', MAX = 10; // MAX = จำนวนอันดับสูงสุด ปรับได้
+  const FALLBACK = [
+    { id: 'f1', uni: 'จุฬาลงกรณ์มหาวิทยาลัย', name: 'วิศวกรรมศาสตร์', round: '3' },
+    { id: 'f2', uni: 'มหาวิทยาลัยเกษตรศาสตร์', name: 'วิศวกรรมคอมพิวเตอร์', round: '3' },
+    { id: 'f3', uni: 'มหาวิทยาลัยเชียงใหม่', name: 'แพทยศาสตร์', round: '3' }
+  ];
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const programs = () => (typeof DATA !== 'undefined' && DATA && Array.isArray(DATA.programs) && DATA.programs.length) ? DATA.programs : FALLBACK;
+
+  let picks = [], q = '', rnd = '', tab = 'find';
+  try { picks = JSON.parse(localStorage.getItem(KEY)) || []; } catch (e) {}
+
+  const css = document.createElement('style');
+  css.textContent = `
+  #pk-fab{position:fixed;right:16px;bottom:calc(76px + env(safe-area-inset-bottom));z-index:20;border:0;border-radius:99px;padding:12px 18px;background:var(--ink,#16324f);color:var(--bg,#fff);font:600 .95rem inherit;font-family:inherit;box-shadow:0 2px 10px rgba(0,0,0,.25);cursor:pointer}
+  #pk{width:min(560px,100vw);max-width:100vw;height:min(88vh,720px);margin:auto auto 0;padding:0;border:0;border-radius:16px 16px 0 0;background:var(--bg,#f6f7f4);color:var(--ink,#16324f);font-family:inherit}
+  #pk::backdrop{background:rgba(0,0,0,.45)}
+  #pk .pk-w{display:flex;flex-direction:column;height:100%}
+  #pk .pk-h{display:flex;justify-content:space-between;align-items:center;padding:14px 16px 6px}
+  #pk h2{margin:0;font-size:1.1rem}
+  #pk .pk-t{display:flex;padding:0 16px;gap:8px}
+  #pk .pk-t button{flex:1;padding:8px;border:1px solid var(--line,#dbe0e3);border-radius:8px;background:none;color:inherit;font:inherit;cursor:pointer}
+  #pk .pk-t button.on{background:var(--ink,#16324f);color:var(--bg,#fff)}
+  #pk .pk-b{flex:1;overflow:auto;padding:8px 16px 24px}
+  #pk input,#pk select{width:100%;padding:10px;border:1px solid var(--line,#dbe0e3);border-radius:8px;background:var(--card,#fff);color:inherit;font:inherit;margin:4px 0}
+  #pk .pk-r{display:flex;gap:8px}
+  #pk ul,#pk ol{list-style:none;margin:0;padding:0}
+  #pk li{display:flex;justify-content:space-between;align-items:center;gap:8px;background:var(--card,#fff);border:1px solid var(--line,#dbe0e3);border-radius:10px;padding:10px 12px;margin:8px 0}
+  #pk li small{display:block;color:var(--mute,#5b6b7c)}
+  #pk li button,#pk .pk-btn{border:1px solid currentColor;background:none;color:inherit;border-radius:8px;padding:6px 10px;font:inherit;cursor:pointer;white-space:nowrap}
+  #pk li button.on{background:var(--ink,#16324f);color:var(--bg,#fff)}
+  #pk .pk-n{font-weight:800;min-width:1.6em}
+  #pk .pk-tool{display:flex;gap:4px}
+  #pk .pk-tag{font-size:.78rem;font-weight:600}
+  #pk .pk-ok{color:var(--ok,#1f8a5b)}#pk .pk-mid{color:var(--mid,#b7791f)}#pk .pk-hard{color:var(--hard,#b83b3b)}
+  #pk .pk-msg{min-height:1.4em;font-size:.85rem;color:var(--mute,#5b6b7c);padding:0 16px 8px}
+  #pk :focus-visible,#pk-fab:focus-visible{outline:3px solid #f2b632;outline-offset:2px}`;
+  document.head.appendChild(css);
+
+  const fab = document.createElement('button');
+  fab.id = 'pk-fab'; fab.type = 'button';
+  const dlg = document.createElement('dialog');
+  dlg.id = 'pk'; dlg.setAttribute('aria-label', 'เลือกคณะ');
+  document.body.append(fab, dlg);
+
+  function status(it) { // ใช้ Calc/Store เดิมถ้ามี เพื่อโชว์ผลเทียบคะแนน
+    try {
+      const p = programs().find(x => x.id === it.id);
+      if (p && p.w && typeof Calc !== 'undefined' && typeof Store !== 'undefined') {
+        const s = Calc.status(p, Store.s.scores);
+        return `<span class="pk-tag pk-${s.cls}">${esc(s.label)}</span>`;
+      }
+    } catch (e) {}
+    return '';
+  }
+  const has = id => picks.some(p => p.id === id);
+  function msg(t) { const m = dlg.querySelector('.pk-msg'); if (m) m.textContent = t; }
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(picks)); } catch (e) {}
+    fab.textContent = `เลือกคณะ (${picks.length})`;
+    document.dispatchEvent(new CustomEvent('tcas:picks', { detail: picks.slice() }));
+  }
+
+  function findList() {
+    const k = q.trim().toLowerCase();
+    const r = programs().filter(p => (!rnd || String(p.round) === rnd) && (p.name + p.uni).toLowerCase().includes(k));
+    return r.length ? '<ul>' + r.map(p => `<li><div><b>${esc(p.name)}</b><small>${esc(p.uni)} รอบ ${esc(p.round)}</small>${status(p)}</div>
+      <button data-add="${esc(p.id)}" class="${has(p.id) ? 'on' : ''}" aria-pressed="${has(p.id)}">${has(p.id) ? 'เลือกแล้ว ✓' : 'เลือก'}</button></li>`).join('') + '</ul>'
+      : '<p>ไม่พบคณะที่ตรงกับคำค้น ลองล้างตัวกรอง หรือเพิ่มคณะเองด้านล่าง</p>';
+  }
+  function pickList() {
+    if (!picks.length) return '<p>ยังไม่ได้เลือกคณะ กลับไปแท็บ “ค้นหา” แล้วกด “เลือก”</p>';
+    return '<ol>' + picks.map((p, i) => `<li><span class="pk-n">${i + 1}</span><div style="flex:1"><b>${esc(p.name)}</b><small>${esc(p.uni)}</small>${status(p)}</div>
+      <span class="pk-tool"><button data-up="${i}" aria-label="เลื่อนขึ้น"${i === 0 ? ' disabled' : ''}>▲</button>
+      <button data-down="${i}" aria-label="เลื่อนลง"${i === picks.length - 1 ? ' disabled' : ''}>▼</button>
+      <button data-del="${i}" aria-label="ลบ">ลบ</button></span></li>`).join('') + '</ol>'
+      + '<button class="pk-btn" data-copy>คัดลอกรายการอันดับ</button>';
+  }
+  function render() {
+    const rounds = [...new Set(programs().map(p => String(p.round)))].sort();
+    dlg.innerHTML = `<div class="pk-w"><div class="pk-h"><h2>เลือกคณะ (${picks.length}/${MAX})</h2><button class="pk-btn" data-close>ปิด</button></div>
+    <div class="pk-t"><button data-tab="find" class="${tab === 'find' ? 'on' : ''}">ค้นหา</button><button data-tab="mine" class="${tab === 'mine' ? 'on' : ''}">อันดับของฉัน</button></div>
+    <div class="pk-msg" role="status" aria-live="polite"></div>
+    <div class="pk-b">${tab === 'find' ? `
+      <div class="pk-r"><input id="pk-q" type="search" placeholder="ค้นหาคณะหรือมหาวิทยาลัย" value="${esc(q)}" aria-label="ค้นหา">
+      <select id="pk-round" aria-label="รอบ" style="max-width:120px"><option value="">ทุกรอบ</option>${rounds.map(r => `<option value="${esc(r)}"${rnd === r ? ' selected' : ''}>รอบ ${esc(r)}</option>`).join('')}</select></div>
+      <div id="pk-list">${findList()}</div>
+      <details style="margin-top:16px"><summary>ไม่พบคณะ? เพิ่มเอง</summary>
+        <input id="pk-cu" placeholder="มหาวิทยาลัย"><input id="pk-cn" placeholder="คณะ/สาขา">
+        <button class="pk-btn" data-custom>เพิ่มเข้ารายการ</button></details>` : pickList()}</div></div>`;
+  }
+
+  function open(t) { if (t) tab = t; render(); if (!dlg.open) dlg.showModal(); }
+  fab.addEventListener('click', () => open());
+  dlg.addEventListener('click', e => {
+    if (e.target === dlg) return dlg.close(); // แตะพื้นหลังเพื่อปิด
+    const b = e.target.closest('button'); if (!b) return;
+    const d = b.dataset;
+    if ('close' in d) return dlg.close();
+    if (d.tab) { tab = d.tab; return render(); }
+    if (d.add) {
+      const i = picks.findIndex(p => p.id === d.add);
+      if (i >= 0) picks.splice(i, 1);
+      else if (picks.length >= MAX) return msg(`เลือกได้สูงสุด ${MAX} อันดับ`);
+      else { const p = programs().find(x => x.id === d.add); picks.push({ id: p.id, uni: p.uni, name: p.name, round: p.round }); }
+      save(); const y = dlg.querySelector('.pk-b').scrollTop; render(); dlg.querySelector('.pk-b').scrollTop = y; return;
+    }
+    if (d.up !== undefined || d.down !== undefined) {
+      const i = +(d.up ?? d.down), j = d.up !== undefined ? i - 1 : i + 1;
+      [picks[i], picks[j]] = [picks[j], picks[i]]; save(); return render();
+    }
+    if (d.del !== undefined) { picks.splice(+d.del, 1); save(); return render(); }
+    if ('copy' in d) {
+      const t = picks.map((p, i) => `${i + 1}. ${p.name} ${p.uni}`).join('\n');
+      (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => msg('คัดลอกแล้ว'), () => msg('คัดลอกไม่ได้ ให้กดค้างที่ข้อความแล้วคัดลอกเอง'));
+      return;
+    }
+    if ('custom' in d) {
+      const u = dlg.querySelector('#pk-cu').value.trim(), n = dlg.querySelector('#pk-cn').value.trim();
+      if (!u || !n) return msg('กรอกทั้งมหาวิทยาลัยและคณะ');
+      if (picks.length >= MAX) return msg(`เลือกได้สูงสุด ${MAX} อันดับ`);
+      picks.push({ id: 'c' + Date.now(), uni: u, name: n, round: '' }); save(); tab = 'mine'; render();
+    }
+  });
+  dlg.addEventListener('input', e => {
+    if (e.target.id === 'pk-q') { q = e.target.value; dlg.querySelector('#pk-list').innerHTML = findList(); }
+  });
+  dlg.addEventListener('change', e => {
+    if (e.target.id === 'pk-round') { rnd = e.target.value; dlg.querySelector('#pk-list').innerHTML = findList(); }
+  });
+
+  function add(p) {
+    if (has(p.id)) return true;
+    if (picks.length >= MAX) return false;
+    picks.push({ id: p.id, uni: p.uni, name: p.name, round: p.round });
+    save(); return true;
+  }
+  window.Picker = { get: () => picks.slice(), open, add, has }; // เรียกใช้จากไฟล์อื่นได้ เช่น Picker.get()
+  save();
+})();
